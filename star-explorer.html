@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Star Constellation Explorer</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#060b18;overflow:hidden;font-family:'Segoe UI',system-ui,sans-serif}
+#sky{display:block;width:100vw;height:100vh;cursor:crosshair}
+
+#info-panel{
+  position:absolute;top:50%;right:24px;transform:translateY(-50%);
+  background:rgba(6,11,28,0.95);border:1px solid rgba(120,170,255,0.25);
+  border-radius:16px;padding:24px;width:270px;color:#e0e8ff;
+  backdrop-filter:blur(12px);display:none;
+}
+#info-panel.visible{display:block;animation:slideIn 0.25s ease}
+@keyframes slideIn{
+  from{opacity:0;transform:translateY(-50%) translateX(14px)}
+  to{opacity:1;transform:translateY(-50%) translateX(0)}
+}
+#close-btn{
+  position:absolute;top:12px;right:14px;background:transparent;
+  border:none;color:rgba(255,255,255,0.35);font-size:18px;cursor:pointer;
+  line-height:1;padding:2px 6px;transition:color 0.2s
+}
+#close-btn:hover{color:#fff}
+.p-name{font-size:22px;font-weight:700;color:#a8d4ff;margin-bottom:3px;letter-spacing:0.3px}
+.p-meta{font-size:11px;color:rgba(255,255,255,0.35);margin-bottom:14px;letter-spacing:0.5px}
+.p-myth{font-size:13px;line-height:1.75;color:rgba(224,232,255,0.82);margin-bottom:16px}
+.p-label{font-size:10px;letter-spacing:1.8px;text-transform:uppercase;color:rgba(255,255,255,0.28);margin-bottom:8px}
+.badges{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:16px}
+.badge{background:rgba(120,170,255,0.1);color:#a8d4ff;border:1px solid rgba(120,170,255,0.22);border-radius:20px;font-size:11px;padding:3px 10px}
+.slist{display:flex;flex-direction:column;gap:5px}
+.srow{display:flex;justify-content:space-between;font-size:12px;color:rgba(224,232,255,0.72)}
+.srow span:last-child{color:rgba(255,255,255,0.28);font-size:11px}
+
+#controls{
+  position:absolute;bottom:24px;left:50%;transform:translateX(-50%);
+  display:flex;gap:10px;align-items:center
+}
+#controls select,#controls button{
+  background:rgba(6,11,28,0.88);color:#e0e8ff;
+  border:1px solid rgba(120,170,255,0.2);border-radius:10px;
+  padding:8px 16px;cursor:pointer;font-size:13px;font-family:inherit;
+  transition:background 0.2s,border-color 0.2s;outline:none
+}
+#controls select:hover,#controls button:hover{
+  background:rgba(25,40,85,0.95);border-color:rgba(120,170,255,0.45)
+}
+
+#tooltip{
+  position:absolute;background:rgba(6,11,28,0.92);
+  border:1px solid rgba(120,170,255,0.2);border-radius:8px;
+  color:#a8d4ff;font-size:12px;padding:5px 12px;
+  pointer-events:none;display:none;white-space:nowrap;letter-spacing:0.4px
+}
+
+#hint{
+  position:absolute;top:22px;left:50%;transform:translateX(-50%);
+  font-size:12px;color:rgba(255,255,255,0.22);letter-spacing:1.2px;
+  pointer-events:none;transition:opacity 1.2s
+}
+#hint.hidden{opacity:0}
+
+#title-bar{
+  position:absolute;top:20px;left:28px;pointer-events:none
+}
+#title-bar h1{font-size:15px;font-weight:600;color:rgba(168,210,255,0.7);letter-spacing:2px;text-transform:uppercase}
+#title-bar p{font-size:11px;color:rgba(255,255,255,0.2);margin-top:3px;letter-spacing:0.5px}
+</style>
+</head>
+<body>
+
+<canvas id="sky"></canvas>
+
+<div id="title-bar">
+  <h1>✦ Star Explorer</h1>
+  <p>6 constellations · Greek mythology</p>
+</div>
+
+<div id="info-panel">
+  <button id="close-btn">&#x2715;</button>
+  <div id="panel-content"></div>
+</div>
+
+<div id="controls">
+  <select id="month-filter">
+    <option value="all">All seasons</option>
+    <option value="January">January</option>
+    <option value="February">February</option>
+    <option value="March">March</option>
+    <option value="April">April</option>
+    <option value="May">May</option>
+    <option value="June">June</option>
+    <option value="July">July</option>
+    <option value="August">August</option>
+    <option value="September">September</option>
+    <option value="October">October</option>
+    <option value="November">November</option>
+    <option value="December">December</option>
+  </select>
+  <button id="btn-lines">Hide lines</button>
+  <button id="btn-names">Hide names</button>
+</div>
+
+<div id="tooltip"></div>
+<div id="hint">Click any constellation to explore</div>
+
+<script>
+const CONSTELLATIONS = [
+  {
+    id:"orion",name:"Orion",
+    myth:"The great hunter of Greek mythology. Son of Poseidon, Orion boasted he would hunt every creature on Earth. Gaia sent a giant scorpion to stop him. Zeus placed both in the sky on opposite sides so they never meet.",
+    season:["November","December","January","February"],
+    hemisphere:"Both hemispheres",
+    stars:[
+      {name:"Betelgeuse",x:0.20,y:0.28,mag:0.42},
+      {name:"Bellatrix", x:0.34,y:0.26,mag:1.64},
+      {name:"Mintaka",   x:0.22,y:0.44,mag:2.23},
+      {name:"Alnilam",   x:0.27,y:0.48,mag:1.69},
+      {name:"Alnitak",   x:0.32,y:0.52,mag:1.74},
+      {name:"Saiph",     x:0.19,y:0.65,mag:2.07},
+      {name:"Rigel",     x:0.36,y:0.67,mag:0.13}
+    ],
+    lines:[[0,2],[1,2],[2,3],[3,4],[4,5],[4,6],[0,3],[1,4]]
+  },
+  {
+    id:"ursa_major",name:"Ursa Major",
+    myth:"Zeus transformed the nymph Callisto into a bear after Hera's jealousy. Her son Arcas nearly hunted her before Zeus intervened, placing them both among the stars — the Great Bear and her son — together forever.",
+    season:["March","April","May","June"],
+    hemisphere:"Northern hemisphere",
+    stars:[
+      {name:"Dubhe",  x:0.54,y:0.12,mag:1.79},
+      {name:"Merak",  x:0.60,y:0.17,mag:2.37},
+      {name:"Phecda", x:0.65,y:0.22,mag:2.44},
+      {name:"Megrez", x:0.62,y:0.15,mag:3.31},
+      {name:"Alioth", x:0.70,y:0.13,mag:1.77},
+      {name:"Mizar",  x:0.77,y:0.10,mag:2.27},
+      {name:"Alkaid", x:0.84,y:0.07,mag:1.86}
+    ],
+    lines:[[0,1],[1,2],[2,3],[3,0],[3,4],[4,5],[5,6]]
+  },
+  {
+    id:"cassiopeia",name:"Cassiopeia",
+    myth:"Queen of Ethiopia who boasted her beauty surpassed the sea nymphs. Poseidon punished her kingdom with a monster. Placed in the sky as penance, she circles the pole forever — sometimes hanging upside down as humiliation.",
+    season:["October","November","December"],
+    hemisphere:"Northern hemisphere",
+    stars:[
+      {name:"Schedar",  x:0.08,y:0.50,mag:2.24},
+      {name:"Caph",     x:0.15,y:0.43,mag:2.27},
+      {name:"Gamma Cas",x:0.22,y:0.47,mag:2.47},
+      {name:"Ruchbah",  x:0.29,y:0.42,mag:2.68},
+      {name:"Segin",    x:0.36,y:0.46,mag:3.38}
+    ],
+    lines:[[0,1],[1,2],[2,3],[3,4]]
+  },
+  {
+    id:"leo",name:"Leo",
+    myth:"The Nemean Lion, slain by Hercules in the first of his twelve labours. The beast's hide was impervious to all weapons, so Hercules strangled it bare-handed. Zeus honoured the great struggle by placing the lion in the stars.",
+    season:["February","March","April","May"],
+    hemisphere:"Both hemispheres",
+    stars:[
+      {name:"Regulus", x:0.48,y:0.55,mag:1.35},
+      {name:"Denebola",x:0.67,y:0.50,mag:2.14},
+      {name:"Algieba", x:0.52,y:0.47,mag:2.28},
+      {name:"Zosma",   x:0.63,y:0.46,mag:2.56},
+      {name:"Eta Leo", x:0.57,y:0.39,mag:3.49},
+      {name:"Adhafera",x:0.50,y:0.39,mag:3.44},
+      {name:"Epsilon", x:0.44,y:0.44,mag:2.98}
+    ],
+    lines:[[0,6],[6,2],[2,5],[5,4],[4,3],[3,1],[1,3],[0,2]]
+  },
+  {
+    id:"scorpius",name:"Scorpius",
+    myth:"The scorpion sent by Gaia to slay Orion after his boastful claim to hunt every animal. Zeus placed both on opposite ends of the sky — when Scorpius rises in the east, Orion disappears below the western horizon.",
+    season:["June","July","August"],
+    hemisphere:"Southern hemisphere",
+    stars:[
+      {name:"Antares", x:0.74,y:0.50,mag:1.06},
+      {name:"Graffias",x:0.69,y:0.41,mag:2.62},
+      {name:"Dschubba",x:0.75,y:0.40,mag:2.32},
+      {name:"Pi Sco",  x:0.80,y:0.41,mag:2.89},
+      {name:"Shaula",  x:0.83,y:0.72,mag:1.62},
+      {name:"Lesath",  x:0.85,y:0.68,mag:2.69},
+      {name:"Sargas",  x:0.82,y:0.62,mag:1.86},
+      {name:"Girtab",  x:0.80,y:0.56,mag:2.39}
+    ],
+    lines:[[1,0],[2,0],[3,0],[0,7],[7,6],[6,5],[5,4]]
+  },
+  {
+    id:"gemini",name:"Gemini",
+    myth:"Castor and Pollux — twin sons of Leda. Castor was mortal, Pollux immortal. When Castor died, Pollux begged Zeus to share his immortality. Zeus placed them together in the sky, inseparable for eternity.",
+    season:["December","January","February","March"],
+    hemisphere:"Both hemispheres",
+    stars:[
+      {name:"Castor",  x:0.42,y:0.26,mag:1.58},
+      {name:"Pollux",  x:0.49,y:0.28,mag:1.16},
+      {name:"Alhena",  x:0.51,y:0.39,mag:1.93},
+      {name:"Wasat",   x:0.44,y:0.37,mag:3.53},
+      {name:"Mebsuda", x:0.40,y:0.34,mag:2.98},
+      {name:"Mekbuda", x:0.47,y:0.43,mag:4.15},
+      {name:"Alzirr",  x:0.54,y:0.43,mag:3.36}
+    ],
+    lines:[[0,4],[4,3],[3,5],[5,2],[1,2],[0,3],[1,6],[6,2]]
+  }
+];
+
+const canvas = document.getElementById('sky');
+const ctx = canvas.getContext('2d');
+let W, H, bgStars = [];
+let selected = null, hovered = null;
+let showLines = true, showNames = true;
+let activeMonth = 'all';
+let t = 0;
+
+function resize(){
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  bgStars = [];
+  const n = Math.floor(W * H / 1800);
+  for(let i = 0; i < n; i++){
+    bgStars.push({
+      x: Math.random()*W, y: Math.random()*H,
+      r: Math.random()*1.1+0.2,
+      ph: Math.random()*Math.PI*2,
+      sp: Math.random()*0.4+0.25
+    });
+  }
+}
+
+function sx(fx){ const p=Math.min(W,H)*0.08; return p+fx*(W-p*2); }
+function sy(fy){ const pt=H*0.12,pb=H*0.16; return pt+fy*(H-pt-pb); }
+
+function draw(){
+  t += 0.007;
+  ctx.clearRect(0,0,W,H);
+
+  // background stars
+  for(const s of bgStars){
+    const a = 0.12 + 0.22*Math.abs(Math.sin(t*s.sp+s.ph));
+    ctx.beginPath();
+    ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
+    ctx.fillStyle = `rgba(200,218,255,${a})`;
+    ctx.fill();
+  }
+
+  for(const c of CONSTELLATIONS) drawConstellation(c);
+  requestAnimationFrame(draw);
+}
+
+function drawConstellation(c){
+  const isSel = selected?.id === c.id;
+  const isHov = hovered?.id === c.id;
+  const inSeason = activeMonth==='all' || c.season.includes(activeMonth);
+  const ba = inSeason ? 1.0 : 0.12;
+
+  // lines
+  if(showLines){
+    for(const [a,b] of c.lines){
+      ctx.beginPath();
+      ctx.moveTo(sx(c.stars[a].x), sy(c.stars[a].y));
+      ctx.lineTo(sx(c.stars[b].x), sy(c.stars[b].y));
+      if(isSel){ctx.strokeStyle=`rgba(140,192,255,${0.72*ba})`;ctx.lineWidth=1.5;}
+      else if(isHov){ctx.strokeStyle=`rgba(140,192,255,${0.38*ba})`;ctx.lineWidth=1.0;}
+      else{ctx.strokeStyle=`rgba(90,130,210,${0.16*ba})`;ctx.lineWidth=0.7;}
+      ctx.stroke();
+    }
+  }
+
+  // stars
+  for(let i=0;i<c.stars.length;i++){
+    const s = c.stars[i];
+    const x = sx(s.x), y = sy(s.y);
+    const r = Math.max(1.5, 4.8 - s.mag*1.05);
+    const tw = 0.55 + 0.45*Math.abs(Math.sin(t*1.3+i*0.97));
+
+    if(isSel){
+      ctx.beginPath(); ctx.arc(x,y,r+6,0,Math.PI*2);
+      ctx.fillStyle=`rgba(130,195,255,${0.07*ba})`; ctx.fill();
+      ctx.beginPath(); ctx.arc(x,y,r+2.5,0,Math.PI*2);
+      ctx.fillStyle=`rgba(155,210,255,${0.14*ba})`; ctx.fill();
+    }
+
+    ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2);
+    if(isSel)      ctx.fillStyle=`rgba(210,230,255,${tw*ba})`;
+    else if(isHov) ctx.fillStyle=`rgba(180,212,255,${tw*0.9*ba})`;
+    else           ctx.fillStyle=`rgba(255,255,255,${tw*0.78*ba})`;
+    ctx.fill();
+
+    if(isSel && showNames){
+      ctx.fillStyle=`rgba(168,212,255,${0.72*ba})`;
+      ctx.font='11px "Segoe UI",system-ui,sans-serif';
+      ctx.fillText(s.name, x+r+5, y+4);
+    }
+  }
+
+  // label
+  if(showNames){
+    const cx = c.stars.reduce((a,s)=>a+sx(s.x),0)/c.stars.length;
+    const cy = Math.min(...c.stars.map(s=>sy(s.y)))-20;
+    ctx.textAlign='center';
+    if(isSel){
+      ctx.font='600 13px "Segoe UI",system-ui,sans-serif';
+      ctx.fillStyle=`rgba(168,212,255,${0.95*ba})`;
+    } else if(isHov){
+      ctx.font='600 12px "Segoe UI",system-ui,sans-serif';
+      ctx.fillStyle=`rgba(200,225,255,${0.78*ba})`;
+    } else {
+      ctx.font='11px "Segoe UI",system-ui,sans-serif';
+      ctx.fillStyle=`rgba(255,255,255,${0.26*ba})`;
+    }
+    ctx.fillText(c.name.toUpperCase(), cx, cy);
+    ctx.textAlign='left';
+  }
+}
+
+function hitTest(mx,my){
+  for(const c of CONSTELLATIONS){
+    for(const s of c.stars){
+      const dx=mx-sx(s.x), dy=my-sy(s.y);
+      if(dx*dx+dy*dy < 196) return c;
+    }
+    const cx=c.stars.reduce((a,s)=>a+sx(s.x),0)/c.stars.length;
+    const cy=Math.min(...c.stars.map(s=>sy(s.y)))-20;
+    if(Math.abs(mx-cx)<55 && Math.abs(my-cy)<14) return c;
+  }
+  return null;
+}
+
+function showPanel(c){
+  const panel = document.getElementById('info-panel');
+  if(!c){ panel.classList.remove('visible'); return; }
+  const top = [...c.stars].sort((a,b)=>a.mag-b.mag).slice(0,4);
+  document.getElementById('panel-content').innerHTML = `
+    <div class="p-name">${c.name}</div>
+    <div class="p-meta">${c.stars.length} stars &nbsp;·&nbsp; ${c.hemisphere}</div>
+    <p class="p-myth">${c.myth}</p>
+    <div class="p-label">Best visible</div>
+    <div class="badges">${c.season.map(s=>`<span class="badge">${s}</span>`).join('')}</div>
+    <div class="p-label">Brightest stars</div>
+    <div class="slist">${top.map(s=>`
+      <div class="srow"><span>${s.name}</span><span>mag ${s.mag.toFixed(2)}</span></div>
+    `).join('')}</div>
+  `;
+  panel.classList.add('visible');
+}
+
+canvas.addEventListener('click', e=>{
+  const hit = hitTest(e.clientX, e.clientY);
+  selected = (hit && hit.id !== selected?.id) ? hit : null;
+  showPanel(selected);
+  if(hit) document.getElementById('hint').classList.add('hidden');
+});
+
+canvas.addEventListener('mousemove', e=>{
+  const hit = hitTest(e.clientX, e.clientY);
+  hovered = hit;
+  canvas.style.cursor = hit ? 'pointer' : 'crosshair';
+  const tt = document.getElementById('tooltip');
+  if(hit && hit.id !== selected?.id){
+    tt.style.display='block';
+    tt.style.left=(e.clientX+14)+'px';
+    tt.style.top=(e.clientY-10)+'px';
+    tt.textContent=hit.name;
+  } else { tt.style.display='none'; }
+});
+
+canvas.addEventListener('mouseleave',()=>{
+  hovered=null;
+  document.getElementById('tooltip').style.display='none';
+});
+
+canvas.addEventListener('touchend', e=>{
+  e.preventDefault();
+  const touch = e.changedTouches[0];
+  const hit = hitTest(touch.clientX, touch.clientY);
+  selected = (hit && hit.id !== selected?.id) ? hit : null;
+  showPanel(selected);
+  if(hit) document.getElementById('hint').classList.add('hidden');
+},{passive:false});
+
+document.getElementById('close-btn').onclick = ()=>{ selected=null; showPanel(null); };
+document.getElementById('month-filter').onchange = function(){ activeMonth=this.value; };
+document.getElementById('btn-lines').onclick = function(){
+  showLines=!showLines; this.textContent=showLines?'Hide lines':'Show lines';
+};
+document.getElementById('btn-names').onclick = function(){
+  showNames=!showNames; this.textContent=showNames?'Hide names':'Show names';
+};
+window.addEventListener('resize', resize);
+
+resize();
+draw();
+</script>
+</body>
+</html>
